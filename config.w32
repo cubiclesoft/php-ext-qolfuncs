@@ -1,0 +1,7 @@
+ARG_ENABLE('qolfuncs', 'enable quality of life improvement functions support', 'no');
+
+if (PHP_QOLFUNCS != 'no') {
+	AC_DEFINE('HAVE_QOLFUNCS', 1, 'quality of life improvement functions support enabled');
+
+	EXTENSION('qolfuncs', 'qolfuncs.c', null, '/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1');
+}
