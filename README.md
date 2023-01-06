@@ -12,7 +12,7 @@ The code in this repository may be licensed by the PHP core development team und
 Compiling/Installing
 --------------------
 
-Fair warning:  This extension is NOT designed to be installed on production systems.  Nothing in this section has been tested as the extension was developed inline with a specially prepared PHP 7.4.x for extension development using some flavor of gcc on Ubuntu Linux.  This extension might or might not compile for you but that's not really the point of this code repository.
+Fair warning:  This extension is NOT designed to be installed on production systems.  The Compiling/Installing section of this document (i.e. what you are reading) has been tested as the extension was developed inline with a specially prepared PHP 7.4.x for extension development using some flavor of gcc on Ubuntu Linux.  This extension might or might not compile for you but that's not really the point of this code repository.
 
 With that warning/caveat out of the way, running `phpize` from within the directory with the `config.m4`/`config.w32` file should get the party started.
 
