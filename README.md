@@ -332,7 +332,7 @@ Multiplies the values of two 2D matrices or the values of a 2D matrix or row of 
 
 * $a - A 2D array.
 * $b - A 2D array or a numeric scalar value.
-* $row - An integer specifying the number of the row to multiply the scalar value on.  Nullable.
+* $row - An integer specifying the number of the row to multiply the scalar value on (Default is null).
 
 Returns:  A 2D array with the resulting values of the multiplication operation.
 
