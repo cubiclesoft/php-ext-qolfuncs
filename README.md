@@ -424,7 +424,7 @@ Returns:  A boolean of true if the variable is a reference, false otherwise.
 
 This function determines whether or not a variable is a reference.
 
-As a side note:  I didn't know if this function was going to even be possible but I've needed it on many occasions for debugging purposes.  The Zend engine VM only has two options for its opcodes for parameters:  Coerce a variable to a reference OR coerce a variable to a value.  Fortunately, coercion to a reference is temporary during the function call and causes the refcount to be a minimum of two and is only higher if it an actual reference variable.
+As a side note:  I didn't know if this function was going to even be possible but I've needed it on many occasions for debugging purposes.  The Zend engine VM only has two options for its opcodes for parameters:  Coerce a variable to a reference OR coerce a variable to a value.  Fortunately, coercion to a reference is temporary during the function call and causes the refcount to be a minimum of two and is only higher if it is an actual reference variable.
 
 Target audience:  All users.  Lots of weird application bugs can crop up with references.
 
