@@ -96,6 +96,87 @@ mat_mult() test
 	var_dump(mat_mult($a, $b, 1));
 	var_dump($c);
 	echo "\n";
+
+	// Makes a number of assumptions about the inputs for this function.
+	function mat_mult_matrixonly_userland($a, $b)
+	{
+		$c = array();
+
+		$arows = count($a);
+		$acols = count($b);
+		$bcols = count($b[0]);
+
+		for ($i = 0; $i < $arows; $i++)
+		{
+			$tmpa = $a[$i][0];
+			$b2 = &$b[0];
+
+			$c[$i] = array();
+			$c2 = &$c[$i];
+
+			for ($j = 0; $j < $bcols; $j++)
+			{
+				$c2[$j] = $tmpa * $b2[$j];
+			}
+
+			for ($k = 1; $k < $acols; $k++)
+			{
+				$tmpa = $a[$i][$k];
+				$b2 = &$b[$k];
+
+				for ($j = 0; $j < $bcols; $j++)
+				{
+					$c2[$j] += $tmpa * $b2[$j];
+				}
+			}
+		}
+
+		return $c;
+	}
+
+	echo "NxM multiply (integer):\n";
+	$a = array(
+		array(1, 2, 3),
+		array(4, 5, 6),
+		array(7, 8, 9),
+		array(10, 11, 12)
+	);
+
+	$b = array(
+		array(1, 2, 3, 4, 5),
+		array(6, 7, 8, 9, 10),
+		array(11, 12, 13, 14, 15)
+	);
+
+	$c = mat_mult_matrixonly_userland($a, $b);
+	$c2 = mat_mult($a, $b);
+
+	var_dump(count($c) === count($c2));
+	var_dump(count($c[0]) === count($c2[0]));
+	var_dump(serialize($c) === serialize($c2));
+	echo "\n";
+
+	echo "NxM multiply (double):\n";
+	$a = array(
+		array(1.1, 2.1, 3.1),
+		array(4.1, 5.1, 6.1),
+		array(7.1, 8.1, 9.1),
+		array(10.1, 11.1, 12.1)
+	);
+
+	$b = array(
+		array(1, 2, 3, 4, 5),
+		array(6, 7, 8, 9, 10),
+		array(11, 12, 13, 14, 15)
+	);
+
+	$c = mat_mult_matrixonly_userland($a, $b);
+	$c2 = mat_mult($a, $b);
+
+	var_dump(count($c) === count($c2));
+	var_dump(count($c[0]) === count($c2[0]));
+	var_dump(serialize($c) === serialize($c2));
+	echo "\n";
 ?>
 --EXPECT--
 Matrix multiply (integer):
@@ -297,3 +378,13 @@ array(2) {
     float(20.4)
   }
 }
+
+NxM multiply (integer):
+bool(true)
+bool(true)
+bool(true)
+
+NxM multiply (double):
+bool(true)
+bool(true)
+bool(true)
