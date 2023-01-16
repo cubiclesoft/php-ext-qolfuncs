@@ -23,8 +23,11 @@ mat_mult() test
 		array($a[1][0] * $b[0][0] + $a[1][1] * $b[1][0], $a[1][0] * $b[0][1] + $a[1][1] * $b[1][1])
 	);
 
-	var_dump(mat_mult($a, $b));
-	var_dump($c);
+	$c2 = mat_mult($a, $b);
+
+	var_dump(count($c) === count($c2));
+	var_dump(count($c[0]) === count($c2[0]));
+	var_dump(serialize($c) === serialize($c2));
 	echo "\n";
 
 	echo "Matrix multiply (double):\n";
@@ -43,8 +46,11 @@ mat_mult() test
 		array($a[1][0] * $b[0][0] + $a[1][1] * $b[1][0], $a[1][0] * $b[0][1] + $a[1][1] * $b[1][1])
 	);
 
-	var_dump(mat_mult($a, $b));
-	var_dump($c);
+	$c2 = mat_mult($a, $b);
+
+	var_dump(count($c) === count($c2));
+	var_dump(count($c[0]) === count($c2[0]));
+	var_dump(serialize($c) === serialize($c2));
 	echo "\n";
 
 	echo "Scalar multiply (integer):\n";
@@ -60,16 +66,22 @@ mat_mult() test
 		array($a[1][0] * $b, $a[1][1] * $b)
 	);
 
-	var_dump(mat_mult($a, $b));
-	var_dump($c);
+	$c2 = mat_mult($a, $b);
+
+	var_dump(count($c) === count($c2));
+	var_dump(count($c[0]) === count($c2[0]));
+	var_dump(serialize($c) === serialize($c2));
 
 	$c = array(
 		array($a[0][0], $a[0][1]),
 		array($a[1][0] * $b, $a[1][1] * $b)
 	);
 
-	var_dump(mat_mult($a, $b, 1));
-	var_dump($c);
+	$c2 = mat_mult($a, $b, 1);
+
+	var_dump(count($c) === count($c2));
+	var_dump(count($c[0]) === count($c2[0]));
+	var_dump(serialize($c) === serialize($c2));
 	echo "\n";
 
 	echo "Scalar multiply (double):\n";
@@ -85,16 +97,22 @@ mat_mult() test
 		array($a[1][0] * $b, $a[1][1] * $b)
 	);
 
-	var_dump(mat_mult($a, $b));
-	var_dump($c);
+	$c2 = mat_mult($a, $b);
+
+	var_dump(count($c) === count($c2));
+	var_dump(count($c[0]) === count($c2[0]));
+	var_dump(serialize($c) === serialize($c2));
 
 	$c = array(
 		array($a[0][0], $a[0][1]),
 		array($a[1][0] * $b, $a[1][1] * $b)
 	);
 
-	var_dump(mat_mult($a, $b, 1));
-	var_dump($c);
+	$c2 = mat_mult($a, $b, 1);
+
+	var_dump(count($c) === count($c2));
+	var_dump(count($c[0]) === count($c2[0]));
+	var_dump(serialize($c) === serialize($c2));
 	echo "\n";
 
 	// Makes a number of assumptions about the inputs for this function.
@@ -180,204 +198,30 @@ mat_mult() test
 ?>
 --EXPECT--
 Matrix multiply (integer):
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(19)
-    [1]=>
-    int(22)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    int(43)
-    [1]=>
-    int(50)
-  }
-}
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(19)
-    [1]=>
-    int(22)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    int(43)
-    [1]=>
-    int(50)
-  }
-}
+bool(true)
+bool(true)
+bool(true)
 
 Matrix multiply (double):
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    float(20.2)
-    [1]=>
-    float(23.4)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    float(44.2)
-    [1]=>
-    float(51.4)
-  }
-}
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    float(20.2)
-    [1]=>
-    float(23.4)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    float(44.2)
-    [1]=>
-    float(51.4)
-  }
-}
+bool(true)
+bool(true)
+bool(true)
 
 Scalar multiply (integer):
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(5)
-    [1]=>
-    int(10)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    int(15)
-    [1]=>
-    int(20)
-  }
-}
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(5)
-    [1]=>
-    int(10)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    int(15)
-    [1]=>
-    int(20)
-  }
-}
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(1)
-    [1]=>
-    int(2)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    int(15)
-    [1]=>
-    int(20)
-  }
-}
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(1)
-    [1]=>
-    int(2)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    int(15)
-    [1]=>
-    int(20)
-  }
-}
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
 
 Scalar multiply (double):
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    float(5.1)
-    [1]=>
-    float(10.2)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    float(15.3)
-    [1]=>
-    float(20.4)
-  }
-}
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    float(5.1)
-    [1]=>
-    float(10.2)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    float(15.3)
-    [1]=>
-    float(20.4)
-  }
-}
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(1)
-    [1]=>
-    int(2)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    float(15.3)
-    [1]=>
-    float(20.4)
-  }
-}
-array(2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(1)
-    [1]=>
-    int(2)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    float(15.3)
-    [1]=>
-    float(20.4)
-  }
-}
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
 
 NxM multiply (integer):
 bool(true)

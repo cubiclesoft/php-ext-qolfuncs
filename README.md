@@ -36,7 +36,7 @@ Background
 
 This extension was originally intended to be a series of inline memory manipulation functions for high performance string manipulation.  Zend engine has the policy of performing copy-on-write for every string operation.  This means that memory is regularly allocated and deallocated.  In general, this is fine because freed memory goes back into the allocation pool and therefore reduces the number of overall actual allocation requests to the system.
 
-However, very serious performance issues arise when attempting to process and manipulate strings one byte at a time.  This is because PHP lacks specific facilities for inline string manipulation as well as not efficiently manipulating really large strings (e.g. 1MB or more).  Specifically, when appending one byte at a time, I can get up to 9MB/sec on an Intel Core i7 with [system memory capable of performing transfers up to 23GB/sec](https://ram.userbenchmark.com/SpeedTest/91386/GSKILL-F4-2133C15-8GVR-4x8GB).  Modifying existing strings inline only peaks at 35MB/sec on the same hardware.  Those are not typos.  In short, PHP's 0.2% of maximum system memory performance while churning 100% of one CPU thread to modify strings inline is _very_ unimpressive.  Of course, this won't come as any surprise to the PHP core dev team nor is it a design flaw of the language itself.
+However, very serious performance issues arise when attempting to process and manipulate strings one byte at a time.  This is because PHP lacks specific facilities for inline string manipulation as well as not efficiently manipulating really large strings (e.g. 1MB or more).  Specifically, when appending one byte at a time under certain circumstances, I can get up to 9MB/sec on an Intel Core i7 with [system memory capable of performing transfers up to 23GB/sec](https://ram.userbenchmark.com/SpeedTest/91386/GSKILL-F4-2133C15-8GVR-4x8GB).  Modifying existing strings inline only peaks at 35MB/sec on the same hardware.  Those are not typos.  In short, PHP's 0.2% of maximum system memory performance while churning 100% of one CPU thread to modify strings inline is _very_ unimpressive.  Of course, this won't come as any surprise to the PHP core dev team nor is it a design flaw of the language itself.
 
 The development of the [Incredibly Flexible Data Storage file format](https://github.com/cubiclesoft/ifds) lead to the idea to create an extension to improve upon the situation in certain areas where performance is crucial.  As development of this extension progressed, various ideas for a variety of functions ended up being merged into the `str_splice()` super function and eventually the original concept for the extension went by the wayside.  As such, some functions are performance-oriented while others are simply useful for userland development and/or extension development.  So the extension was renamed to be the "qolfuncs" extension because these functions/ideas/concepts improve overall quality of life in various important ways when writing PHP code.  All of the functions are highly desirable for integration into PHP core.
 
@@ -61,7 +61,7 @@ Removes the string designated by offset and length in the destination and replac
 
 Returns:  The size of the destination string.
 
-Unlike `substr_replace()`, `str_splice()` can result in zero memory allocations under carefully controlled conditions.  The function, when possible, performs inline memory manipulation for up to 10x potential performance gains.  That's an untested estimate but a fairly confident metric based on the extensive testing done for IFDS where `substr_replace()` ended up being slightly slower than alternative approaches.
+Unlike `substr_replace()`, `str_splice()` can result in zero memory allocations under carefully controlled conditions.  The function, when possible, performs inline memory manipulation for up to 10x potential performance gains.  Testing `str_splice()` against IFDS shows a 2x improvement to random write performance and notably simpler code (sequential write and both read types remained roughly the same).  Artificial benchmarks show an increase of 160 to 9,200 times faster over built-in options for manipulating large, fixed size 20MB buffers.  Real-world application performance will vary but probably reside more in the "2x to 3x faster" range.  Also, the bigger the buffer being worked with, the greater the gain due to fewer copy operations.
 
 The `$src_repeat` option allows for filling the destination with a repeated substring.  For example, writing 4KB of 0x00 to some part of the string.
 
@@ -301,7 +301,7 @@ Target audience:  Users working with matrices.
 
 Why it should be added to PHP core:  Performant matrix addition from linear algebra.  See:  https://en.wikipedia.org/wiki/Matrix_(mathematics)
 
-How it should be incorporated into PHP core:  As-is into `ext/standard/math.c`.  The macros (e.g. `HT_NEXT_BUCKET_VAL_IND()`) and relevant inline functions (e.g. `zend_hash_get_next_bucket_zval()`) should be placed as-is into `Zend/zend_hash.h`.
+How it should be incorporated into PHP core:  As-is into `ext/standard/math.c`.  The macros (e.g. `HT_NEXT_ELEMENT_VAL_IND()`) and relevant inline functions (e.g. `zend_hash_get_next_zval()`) should be placed as-is into `Zend/zend_hash.h`.
 
 mat_sub()
 ---------

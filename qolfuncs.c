@@ -228,8 +228,8 @@ PHP_FUNCTION(str_splice)
 		if (src_length == 1)
 		{
 			/* Handle the one byte repeating string fill via memset(). */
-			if (src_finallength > 1)  memset(dst + dst_offset, *src, src_finallength);
-			else  dst[dst_offset] = *src;
+			if (src_finallength > 1)  memset(dst + dst_offset, *(src + src_offset), src_finallength);
+			else  dst[dst_offset] = *(src + src_offset);
 		}
 		else
 		{
@@ -444,7 +444,11 @@ PHPAPI void php_explode_substr_negative_limit(const zend_string *delim, zend_str
 		do {
 			if (found >= allocated) {
 				allocated = found + EXPLODE_ALLOC_STEP;/* make sure we have enough memory */
+#if PHP_MAJOR_VERSION >= 8
+				positions = erealloc(ZEND_VOIDP(positions), allocated*sizeof(char *));
+#else
 				positions = erealloc(positions, allocated*sizeof(char *));
+#endif
 			}
 			positions[found++] = p1 = p2 + ZSTR_LEN(delim);
 			p2 = php_memnstr(p1, ZSTR_VAL(delim), ZSTR_LEN(delim), endp);
@@ -752,6 +756,110 @@ PHPAPI PHP_FUNCTION(fwrite_substr)
 #include "ext/hash/php_hash.h"
 #include "ext/standard/file.h"
 
+#if PHP_MAJOR_VERSION >= 8
+
+static void php_hash_do_hash(
+	zval *return_value, zend_string *algo, char *data, size_t data_len, bool raw_output, bool isfilename, HashTable *args
+) /* {{{ */ {
+	zend_string *digest;
+	const php_hash_ops *ops;
+	void *context;
+	php_stream *stream = NULL;
+
+	ops = php_hash_fetch_ops(algo);
+	if (!ops) {
+		zend_argument_value_error(1, "must be a valid hashing algorithm");
+		RETURN_THROWS();
+	}
+	if (isfilename) {
+		if (CHECK_NULL_PATH(data, data_len)) {
+			zend_argument_value_error(1, "must not contain any null bytes");
+			RETURN_THROWS();
+		}
+		stream = php_stream_open_wrapper_ex(data, "rb", REPORT_ERRORS, NULL, FG(default_context));
+		if (!stream) {
+			/* Stream will report errors opening file */
+			RETURN_FALSE;
+		}
+	}
+
+	context = php_hash_alloc_context(ops);
+	ops->hash_init(context, args);
+
+	if (isfilename) {
+		char buf[1024];
+		ssize_t n;
+
+		while ((n = php_stream_read(stream, buf, sizeof(buf))) > 0) {
+			ops->hash_update(context, (unsigned char *) buf, n);
+		}
+		php_stream_close(stream);
+		if (n < 0) {
+			efree(context);
+			RETURN_FALSE;
+		}
+	} else {
+		ops->hash_update(context, (unsigned char *) data, data_len);
+	}
+
+	digest = zend_string_alloc(ops->digest_size, 0);
+	ops->hash_final((unsigned char *) ZSTR_VAL(digest), context);
+	efree(context);
+
+	if (raw_output) {
+		ZSTR_VAL(digest)[ops->digest_size] = 0;
+		RETURN_NEW_STR(digest);
+	} else {
+		zend_string *hex_digest = zend_string_safe_alloc(ops->digest_size, 2, 0, 0);
+
+		php_hash_bin2hex(ZSTR_VAL(hex_digest), (unsigned char *) ZSTR_VAL(digest), ops->digest_size);
+		ZSTR_VAL(hex_digest)[2 * ops->digest_size] = 0;
+		zend_string_release_ex(digest, 0);
+		RETURN_NEW_STR(hex_digest);
+	}
+}
+/* }}} */
+
+/* {{{ Generate a hash of a given input string
+Returns lowercase hexits by default */
+PHP_FUNCTION(hash_substr)
+{
+	zend_string *algo;
+	char *data;
+	size_t data_len;
+	zend_string *zdata;
+	bool raw_output = 0;
+	HashTable *args = NULL;
+	zend_long data_offset = 0, data_len2;
+	zval *zdata_len2;
+
+	ZEND_PARSE_PARAMETERS_START(2, 6)
+		Z_PARAM_STR(algo)
+		Z_PARAM_STR(zdata)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_BOOL(raw_output)
+		Z_PARAM_ARRAY_HT(args)
+		Z_PARAM_LONG(data_offset)
+		Z_PARAM_ZVAL(zdata_len2)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (ZEND_NUM_ARGS() >= 6 && Z_TYPE_P(zdata_len2) != IS_NULL) {
+		data_len2 = Z_LVAL_P(zdata_len2);
+	} else {
+		data_len2 = ZSTR_LEN(zdata);
+	}
+
+	php_adjust_substr_offset_length(zdata, &data_offset, &data_len2);
+
+	data = ZSTR_VAL(zdata) + data_offset;
+	data_len = (size_t)data_len2;
+
+	php_hash_do_hash(return_value, algo, data, data_len, raw_output, 0, args);
+}
+/* }}} */
+
+#else
+
 static void php_hash_do_hash_substr(INTERNAL_FUNCTION_PARAMETERS, int isfilename, zend_bool raw_output_default) /* {{{ */
 {
 	zend_string *digest;
@@ -849,7 +957,159 @@ PHP_FUNCTION(hash_substr)
 }
 /* }}} */
 
+#endif
+
 /* Directly copied functions so that php_hash_do_hash_hmac_substr() will compile. */
+#if PHP_MAJOR_VERSION >= 8
+
+static inline void php_hash_string_xor_char(unsigned char *out, const unsigned char *in, const unsigned char xor_with, const size_t length) {
+	size_t i;
+	for (i=0; i < length; i++) {
+		out[i] = in[i] ^ xor_with;
+	}
+}
+
+static inline void php_hash_string_xor(unsigned char *out, const unsigned char *in, const unsigned char *xor_with, const size_t length) {
+	size_t i;
+	for (i=0; i < length; i++) {
+		out[i] = in[i] ^ xor_with[i];
+	}
+}
+
+static inline void php_hash_hmac_prep_key(unsigned char *K, const php_hash_ops *ops, void *context, const unsigned char *key, const size_t key_len) {
+	memset(K, 0, ops->block_size);
+	if (key_len > ops->block_size) {
+		/* Reduce the key first */
+		ops->hash_init(context, NULL);
+		ops->hash_update(context, key, key_len);
+		ops->hash_final(K, context);
+	} else {
+		memcpy(K, key, key_len);
+	}
+	/* XOR the key with 0x36 to get the ipad) */
+	php_hash_string_xor_char(K, K, 0x36, ops->block_size);
+}
+
+static inline void php_hash_hmac_round(unsigned char *final, const php_hash_ops *ops, void *context, const unsigned char *key, const unsigned char *data, const zend_long data_size) {
+	ops->hash_init(context, NULL);
+	ops->hash_update(context, key, ops->block_size);
+	ops->hash_update(context, data, data_size);
+	ops->hash_final(final, context);
+}
+
+static void php_hash_do_hash_hmac(
+	zval *return_value, zend_string *algo, char *data, size_t data_len, char *key, size_t key_len, bool raw_output, bool isfilename
+) /* {{{ */ {
+	zend_string *digest;
+	unsigned char *K;
+	const php_hash_ops *ops;
+	void *context;
+	php_stream *stream = NULL;
+
+	ops = php_hash_fetch_ops(algo);
+	if (!ops || !ops->is_crypto) {
+		zend_argument_value_error(1, "must be a valid cryptographic hashing algorithm");
+		RETURN_THROWS();
+	}
+
+	if (isfilename) {
+		if (CHECK_NULL_PATH(data, data_len)) {
+			zend_argument_value_error(2, "must not contain any null bytes");
+			RETURN_THROWS();
+		}
+		stream = php_stream_open_wrapper_ex(data, "rb", REPORT_ERRORS, NULL, FG(default_context));
+		if (!stream) {
+			/* Stream will report errors opening file */
+			RETURN_FALSE;
+		}
+	}
+
+	context = php_hash_alloc_context(ops);
+
+	K = emalloc(ops->block_size);
+	digest = zend_string_alloc(ops->digest_size, 0);
+
+	php_hash_hmac_prep_key(K, ops, context, (unsigned char *) key, key_len);
+
+	if (isfilename) {
+		char buf[1024];
+		ssize_t n;
+		ops->hash_init(context, NULL);
+		ops->hash_update(context, K, ops->block_size);
+		while ((n = php_stream_read(stream, buf, sizeof(buf))) > 0) {
+			ops->hash_update(context, (unsigned char *) buf, n);
+		}
+		php_stream_close(stream);
+		if (n < 0) {
+			efree(context);
+			efree(K);
+			zend_string_release(digest);
+			RETURN_FALSE;
+		}
+
+		ops->hash_final((unsigned char *) ZSTR_VAL(digest), context);
+	} else {
+		php_hash_hmac_round((unsigned char *) ZSTR_VAL(digest), ops, context, K, (unsigned char *) data, data_len);
+	}
+
+	php_hash_string_xor_char(K, K, 0x6A, ops->block_size);
+
+	php_hash_hmac_round((unsigned char *) ZSTR_VAL(digest), ops, context, K, (unsigned char *) ZSTR_VAL(digest), ops->digest_size);
+
+	/* Zero the key */
+	ZEND_SECURE_ZERO(K, ops->block_size);
+	efree(K);
+	efree(context);
+
+	if (raw_output) {
+		ZSTR_VAL(digest)[ops->digest_size] = 0;
+		RETURN_NEW_STR(digest);
+	} else {
+		zend_string *hex_digest = zend_string_safe_alloc(ops->digest_size, 2, 0, 0);
+
+		php_hash_bin2hex(ZSTR_VAL(hex_digest), (unsigned char *) ZSTR_VAL(digest), ops->digest_size);
+		ZSTR_VAL(hex_digest)[2 * ops->digest_size] = 0;
+		zend_string_release_ex(digest, 0);
+		RETURN_NEW_STR(hex_digest);
+	}
+}
+/* }}} */
+
+/* {{{ Generate a hash of a given input string with a key using HMAC
+Returns lowercase hexits by default */
+PHP_FUNCTION(hash_hmac_substr)
+{
+	zend_string *algo;
+	char *data, *key;
+	size_t data_len, key_len;
+	zend_string *zdata;
+	bool raw_output = 0;
+	zend_long data_offset = 0, data_len2;
+	zval *zdata_len2;
+
+/* Hmm...should hash_hmac() reserve an $options array parameter for future use and/or consistency with hash()? */
+/* Should this be using zend_parse_parameters() or should this be using the macro expansion mechanism? */
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "SSs|blz", &algo, &zdata, &key, &key_len, &raw_output, &data_offset, &zdata_len2) == FAILURE) {
+		RETURN_THROWS();
+	}
+
+	if (ZEND_NUM_ARGS() >= 6 && Z_TYPE_P(zdata_len2) != IS_NULL) {
+		data_len2 = Z_LVAL_P(zdata_len2);
+	} else {
+		data_len2 = ZSTR_LEN(zdata);
+	}
+
+	php_adjust_substr_offset_length(zdata, &data_offset, &data_len2);
+
+	data = ZSTR_VAL(zdata) + data_offset;
+	data_len = (size_t)data_len2;
+
+	php_hash_do_hash_hmac(return_value, algo, data, data_len, key, key_len, raw_output, 0);
+}
+/* }}} */
+
+#else
+
 static inline void php_hash_string_xor_char(unsigned char *out, const unsigned char *in, const unsigned char xor_with, const size_t length) {
 	size_t i;
 	for (i=0; i < length; i++) {
@@ -1003,6 +1263,8 @@ PHP_FUNCTION(hash_hmac_substr)
 }
 /* }}} */
 
+#endif
+
 /* End of code lifted directly from ext/hash/hash.c and modified slightly to support substrings. */
 
 
@@ -1155,44 +1417,83 @@ PHP_FUNCTION(imageimportpixels)
 #endif
 
 
-/* Useful functions and macros that should exist in zend_hash.h/zend_types.h for iterating over a hash like ZEND_HASH_FOREACH()/ZEND_HASH_REVERSE_FOREACH(). */
-#define HT_NUM_USED(ht) \
-	(ht)->nNumUsed
+/* Useful functions and macros that should exist in zend_hash.h or zend_types.h for iterating over a hash like ZEND_HASH_FOREACH()/ZEND_HASH_REVERSE_FOREACH(). */
+#define ZEND_HASH_NUM_USED(__ht) \
+	(__ht)->nNumUsed
 
-#define HT_BUCKET_VAL(bucket) \
-	&((bucket)->val)
+#define ZEND_HASH_BUCKET_VAL(__bucket) \
+	&((__bucket)->val)
 
-#define HT_BUCKET_FIRST(ht) \
-	(ht)->arData
+/* PHP 8.2 and later muddy the waters with packed zvals vs. Buckets. */
+#if PHP_MAJOR_VERSION > 8 || PHP_MINOR_VERSION >= 2
 
-#define HT_BUCKET_END(ht) \
-	(ht)->arData + (ht)->nNumUsed
+#define ZEND_HASH_FIRST_ELEMENT(__ht) \
+	((void *)(__ht)->arPacked)
 
-static zend_always_inline zval *zend_hash_get_next_bucket_zval(HashTable *ht, Bucket **bucket, zend_bool indirect)
+#define ZEND_HASH_LAST_ELEMENT(__ht) \
+	((void *)ZEND_HASH_ELEMENT((__ht), ZEND_HASH_NUM_USED(__ht) - 1))
+
+#define ZEND_HASH_END_ELEMENT(__ht) \
+	((void *)ZEND_HASH_ELEMENT((__ht), ZEND_HASH_NUM_USED(__ht)))
+
+#else
+
+#define ZEND_HASH_ELEMENT_SIZE(__ht) \
+	sizeof(Bucket)
+
+#define ZEND_HASH_ELEMENT_EX(__ht, _idx, _size) \
+	((zval*)(((char*)(__ht)->arPacked) + ((_idx) * (_size))))
+
+#define ZEND_HASH_ELEMENT(__ht, _idx) \
+	ZEND_HASH_ELEMENT_EX(__ht, _idx, ZEND_HASH_ELEMENT_SIZE(__ht))
+
+#define ZEND_HASH_NEXT_ELEMENT(_el, _size) \
+	((void *)(((char *)(_el)) + (_size)))
+
+#define ZEND_HASH_PREV_ELEMENT(_el, _size) \
+	((void *)(((char *)(_el)) - (_size)))
+
+#define ZEND_HASH_FIRST_ELEMENT(__ht) \
+	(__ht)->arData
+
+#define ZEND_HASH_LAST_ELEMENT(__ht) \
+	((__ht)->arData + (__ht)->nNumUsed - 1)
+
+#define ZEND_HASH_END_ELEMENT(__ht) \
+	((__ht)->arData + (__ht)->nNumUsed)
+
+#endif
+
+static zend_always_inline zval *zend_hash_get_next_zval(HashTable *ht, void **iterator, zend_bool indirect)
 {
+	size_t elemsize = ZEND_HASH_ELEMENT_SIZE(ht);
 	zval *zv;
-	Bucket *end;
+	void *end;
 
-	if (EXPECTED(*bucket)) {
-		(*bucket)++;
+	if (EXPECTED(*iterator)) {
+		*iterator = ZEND_HASH_NEXT_ELEMENT(*iterator, elemsize);
 	} else {
-		*bucket = HT_BUCKET_FIRST(ht);
+		*iterator = ZEND_HASH_FIRST_ELEMENT(ht);
 	}
 
-	end = HT_BUCKET_END(ht);
+	end = ZEND_HASH_END_ELEMENT(ht);
 
-	for (; *bucket < end; (*bucket)++) {
-		zv = HT_BUCKET_VAL(*bucket);
+	for (; *iterator < end; *iterator = ZEND_HASH_NEXT_ELEMENT(*iterator, elemsize)) {
+		if (HT_IS_PACKED(ht)) {
+			zv = (zval *)(*iterator);
+		} else {
+			zv = ZEND_HASH_BUCKET_VAL(((Bucket *)(*iterator)));
 
-		if (indirect && Z_TYPE_P(zv) == IS_INDIRECT) {
-			zv = Z_INDIRECT_P(zv);
+			if (indirect && Z_TYPE_P(zv) == IS_INDIRECT) {
+				zv = Z_INDIRECT_P(zv);
+			}
 		}
 
 		if (EXPECTED(Z_TYPE_P(zv) != IS_UNDEF))  break;
 	}
 
-	if (UNEXPECTED(*bucket >= end)) {
-		*bucket = NULL;
+	if (UNEXPECTED(*iterator >= end)) {
+		*iterator = NULL;
 
 		zv = NULL;
 	}
@@ -1200,31 +1501,36 @@ static zend_always_inline zval *zend_hash_get_next_bucket_zval(HashTable *ht, Bu
 	return zv;
 }
 
-static zend_always_inline zval *zend_hash_get_prev_bucket_zval(HashTable *ht, Bucket **bucket, zend_bool indirect)
+static zend_always_inline zval *zend_hash_get_prev_zval(HashTable *ht, void **iterator, zend_bool indirect)
 {
+	size_t elemsize = ZEND_HASH_ELEMENT_SIZE(ht);
 	zval *zv;
 	Bucket *first;
 
-	if (EXPECTED(*bucket)) {
-		(*bucket)--;
+	if (EXPECTED(*iterator)) {
+		*iterator = ZEND_HASH_PREV_ELEMENT(*iterator, elemsize);
 	} else {
-		*bucket = HT_BUCKET_END(ht) - 1;
+		*iterator = ZEND_HASH_LAST_ELEMENT(ht);
 	}
 
-	first = HT_BUCKET_FIRST(ht) - 1;
+	first = ZEND_HASH_FIRST_ELEMENT(ht);
 
-	for (; *bucket > first; (*bucket)--) {
-		zv = HT_BUCKET_VAL(*bucket);
+	for (; *iterator >= first; *iterator = ZEND_HASH_PREV_ELEMENT(*iterator, elemsize)) {
+		if (HT_IS_PACKED(ht)) {
+			zv = (zval *)(*iterator);
+		} else {
+			zv = ZEND_HASH_BUCKET_VAL(((Bucket *)(*iterator)));
 
-		if (indirect && Z_TYPE_P(zv) == IS_INDIRECT) {
-			zv = Z_INDIRECT_P(zv);
+			if (indirect && Z_TYPE_P(zv) == IS_INDIRECT) {
+				zv = Z_INDIRECT_P(zv);
+			}
 		}
 
 		if (EXPECTED(Z_TYPE_P(zv) != IS_UNDEF))  break;
 	}
 
-	if (UNEXPECTED(*bucket <= first)) {
-		*bucket = NULL;
+	if (UNEXPECTED(*iterator < first)) {
+		*iterator = NULL;
 
 		zv = NULL;
 	}
@@ -1232,23 +1538,23 @@ static zend_always_inline zval *zend_hash_get_prev_bucket_zval(HashTable *ht, Bu
 	return zv;
 }
 
-#define HT_NEXT_BUCKET(ht, bucket, indirect) \
-	zend_hash_get_next_bucket_zval((ht), &(bucket), (indirect))
+#define HT_NEXT_ELEMENT_EX(ht, iterator, indirect) \
+	zend_hash_get_next_zval((ht), &(iterator), (indirect))
 
-#define HT_NEXT_BUCKET_VAL(ht, bucket) \
-	HT_NEXT_BUCKET(ht, bucket, 0)
+#define HT_NEXT_ELEMENT_VAL(ht, iterator) \
+	HT_NEXT_ELEMENT_EX(ht, iterator, 0)
 
-#define HT_NEXT_BUCKET_VAL_IND(ht, bucket) \
-	HT_NEXT_BUCKET(ht, bucket, 1)
+#define HT_NEXT_ELEMENT_VAL_IND(ht, iterator) \
+	HT_NEXT_ELEMENT_EX(ht, iterator, 1)
 
-#define HT_PREV_BUCKET(ht, bucket, indirect) \
-	zend_hash_get_prev_bucket_zval((ht), &(bucket), (indirect))
+#define HT_PREV_ELEMENT_EX(ht, iterator, indirect) \
+	zend_hash_get_prev_zval((ht), &(iterator), (indirect))
 
-#define HT_PREV_BUCKET_VAL(ht, bucket) \
-	HT_PREV_BUCKET(ht, bucket, 0)
+#define HT_PREV_ELEMENT_VAL(ht, iterator) \
+	HT_PREV_ELEMENT_EX(ht, iterator, 0)
 
-#define HT_PREV_BUCKET_VAL_IND(ht, bucket) \
-	HT_PREV_BUCKET(ht, bucket, 1)
+#define HT_PREV_ELEMENT_VAL_IND(ht, iterator) \
+	HT_PREV_ELEMENT_EX(ht, iterator, 1)
 
 
 /* {{{ proto array mat_add(array $a, array $b)
@@ -1256,7 +1562,7 @@ static zend_always_inline zval *zend_hash_get_prev_bucket_zval(HashTable *ht, Bu
 PHP_FUNCTION(mat_add)
 {
 	HashTable *a, *a2, *b, *b2;
-	Bucket *arow = NULL, *acol, *brow = NULL, *bcol;
+	void *arow = NULL, *acol, *brow = NULL, *bcol;
 	zval *aval, *bval, tmprow, tmplval, tmpdval;
 	size_t rows, cols, x;
 
@@ -1274,8 +1580,8 @@ PHP_FUNCTION(mat_add)
 	ZVAL_LONG(&tmplval, 0);
 	ZVAL_DOUBLE(&tmpdval, 0.0);
 
-	aval = HT_NEXT_BUCKET_VAL_IND(a, arow);
-	bval = HT_NEXT_BUCKET_VAL_IND(b, brow);
+	aval = HT_NEXT_ELEMENT_VAL_IND(a, arow);
+	bval = HT_NEXT_ELEMENT_VAL_IND(b, brow);
 	while (arow || brow) {
 		acol = NULL;
 		bcol = NULL;
@@ -1284,7 +1590,7 @@ PHP_FUNCTION(mat_add)
 			cols = zend_array_count(Z_ARRVAL_P(aval));
 
 			a2 = Z_ARRVAL_P(aval);
-			aval = HT_NEXT_BUCKET_VAL_IND(a2, acol);
+			aval = HT_NEXT_ELEMENT_VAL_IND(a2, acol);
 		} else {
 			cols = 0;
 
@@ -1296,7 +1602,7 @@ PHP_FUNCTION(mat_add)
 			if (cols < x)  cols = x;
 
 			b2 = Z_ARRVAL_P(bval);
-			bval = HT_NEXT_BUCKET_VAL_IND(b2, bcol);
+			bval = HT_NEXT_ELEMENT_VAL_IND(b2, bcol);
 		} else {
 			b2 = NULL;
 		}
@@ -1330,14 +1636,14 @@ PHP_FUNCTION(mat_add)
 				zend_hash_next_index_insert_new(Z_ARRVAL(tmprow), &tmplval);
 			}
 
-			if (acol)  aval = HT_NEXT_BUCKET_VAL_IND(a2, acol);
-			if (bcol)  bval = HT_NEXT_BUCKET_VAL_IND(b2, bcol);
+			if (acol)  aval = HT_NEXT_ELEMENT_VAL_IND(a2, acol);
+			if (bcol)  bval = HT_NEXT_ELEMENT_VAL_IND(b2, bcol);
 		}
 
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &tmprow);
 
-		if (arow)  aval = HT_NEXT_BUCKET_VAL_IND(a, arow);
-		if (brow)  bval = HT_NEXT_BUCKET_VAL_IND(b, brow);
+		if (arow)  aval = HT_NEXT_ELEMENT_VAL_IND(a, arow);
+		if (brow)  bval = HT_NEXT_ELEMENT_VAL_IND(b, brow);
 	}
 }
 /* }}} */
@@ -1348,7 +1654,7 @@ PHP_FUNCTION(mat_add)
 PHP_FUNCTION(mat_sub)
 {
 	HashTable *a, *a2, *b, *b2;
-	Bucket *arow = NULL, *acol, *brow = NULL, *bcol;
+	void *arow = NULL, *acol, *brow = NULL, *bcol;
 	zval *aval, *bval, tmprow, tmplval, tmpdval;
 	size_t rows, cols, x;
 
@@ -1366,8 +1672,8 @@ PHP_FUNCTION(mat_sub)
 	ZVAL_LONG(&tmplval, 0);
 	ZVAL_DOUBLE(&tmpdval, 0.0);
 
-	aval = HT_NEXT_BUCKET_VAL_IND(a, arow);
-	bval = HT_NEXT_BUCKET_VAL_IND(b, brow);
+	aval = HT_NEXT_ELEMENT_VAL_IND(a, arow);
+	bval = HT_NEXT_ELEMENT_VAL_IND(b, brow);
 	while (arow || brow) {
 		acol = NULL;
 		bcol = NULL;
@@ -1376,7 +1682,7 @@ PHP_FUNCTION(mat_sub)
 			cols = zend_array_count(Z_ARRVAL_P(aval));
 
 			a2 = Z_ARRVAL_P(aval);
-			aval = HT_NEXT_BUCKET_VAL_IND(a2, acol);
+			aval = HT_NEXT_ELEMENT_VAL_IND(a2, acol);
 		} else {
 			cols = 0;
 
@@ -1388,7 +1694,7 @@ PHP_FUNCTION(mat_sub)
 			if (cols < x)  cols = x;
 
 			b2 = Z_ARRVAL_P(bval);
-			bval = HT_NEXT_BUCKET_VAL_IND(b2, bcol);
+			bval = HT_NEXT_ELEMENT_VAL_IND(b2, bcol);
 		} else {
 			b2 = NULL;
 		}
@@ -1422,14 +1728,14 @@ PHP_FUNCTION(mat_sub)
 				zend_hash_next_index_insert_new(Z_ARRVAL(tmprow), &tmplval);
 			}
 
-			if (acol)  aval = HT_NEXT_BUCKET_VAL_IND(a2, acol);
-			if (bcol)  bval = HT_NEXT_BUCKET_VAL_IND(b2, bcol);
+			if (acol)  aval = HT_NEXT_ELEMENT_VAL_IND(a2, acol);
+			if (bcol)  bval = HT_NEXT_ELEMENT_VAL_IND(b2, bcol);
 		}
 
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &tmprow);
 
-		if (arow)  aval = HT_NEXT_BUCKET_VAL_IND(a, arow);
-		if (brow)  bval = HT_NEXT_BUCKET_VAL_IND(b, brow);
+		if (arow)  aval = HT_NEXT_ELEMENT_VAL_IND(a, arow);
+		if (brow)  bval = HT_NEXT_ELEMENT_VAL_IND(b, brow);
 	}
 }
 /* }}} */
@@ -1441,7 +1747,7 @@ PHP_FUNCTION(mat_mult)
 {
 	int numargs = ZEND_NUM_ARGS();
 	HashTable *a, *b;
-	Bucket *arow = NULL, *acol;
+	void *arow = NULL, *acol;
 	zval *zb, *zrownum, *aval, *aval2, *bval, *bval2, tmprow, tmplval, tmpdval, tmpval;
 	size_t Arows, Acols = 0, Bcols, i, j, k, x;
 	zend_bool usedoubles = 0;
@@ -1525,14 +1831,14 @@ PHP_FUNCTION(mat_mult)
 			} ZEND_HASH_FOREACH_END();
 
 			/* Multiply two virtually normalized matrices (A and B) together.  O(N^3). */
-			aval = HT_NEXT_BUCKET_VAL_IND(a, arow);
+			aval = HT_NEXT_ELEMENT_VAL_IND(a, arow);
 			ZVAL_DOUBLE(&tmpdval, 0.0);
 			for (i = 0; i < Arows; i++) {
 				dBptr = dB;
 
 				acol = NULL;
 				if (arow && EXPECTED(Z_TYPE_P(aval) == IS_ARRAY)) {
-					aval2 = HT_NEXT_BUCKET_VAL_IND(Z_ARRVAL_P(aval), acol);
+					aval2 = HT_NEXT_ELEMENT_VAL_IND(Z_ARRVAL_P(aval), acol);
 				} else {
 					aval2 = NULL;
 				}
@@ -1551,7 +1857,7 @@ PHP_FUNCTION(mat_mult)
 
 				for (k = 1; k < Acols; k++) {
 					if (EXPECTED(acol)) {
-						aval2 = HT_NEXT_BUCKET_VAL_IND(Z_ARRVAL_P(aval), acol);
+						aval2 = HT_NEXT_ELEMENT_VAL_IND(Z_ARRVAL_P(aval), acol);
 					}
 
 					if (EXPECTED(acol)) {
@@ -1580,11 +1886,15 @@ PHP_FUNCTION(mat_mult)
 				zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &tmprow);
 
 				/* Bail out reasonably quickly if the global PHP runtime timeout has been exceeded. */
+#if PHP_MAJOR_VERSION >= 8
+				if (zend_atomic_bool_load_ex(&EG(timed_out))) {
+#else
 				if (EG(timed_out)) {
+#endif
 					arow = NULL;
 				}
 
-				if (arow)  aval = HT_NEXT_BUCKET_VAL_IND(a, arow);
+				if (arow)  aval = HT_NEXT_ELEMENT_VAL_IND(a, arow);
 			}
 
 			efree(dB);
@@ -1619,14 +1929,14 @@ PHP_FUNCTION(mat_mult)
 			} ZEND_HASH_FOREACH_END();
 
 			/* Multiply two virtually normalized matrices (A and B) together.  O(N^3). */
-			aval = HT_NEXT_BUCKET_VAL_IND(a, arow);
+			aval = HT_NEXT_ELEMENT_VAL_IND(a, arow);
 			ZVAL_LONG(&tmplval, 0);
 			for (i = 0; i < Arows; i++) {
 				zlBptr = zlB;
 
 				acol = NULL;
 				if (arow && EXPECTED(Z_TYPE_P(aval) == IS_ARRAY)) {
-					aval2 = HT_NEXT_BUCKET_VAL_IND(Z_ARRVAL_P(aval), acol);
+					aval2 = HT_NEXT_ELEMENT_VAL_IND(Z_ARRVAL_P(aval), acol);
 				} else {
 					aval2 = NULL;
 				}
@@ -1645,7 +1955,7 @@ PHP_FUNCTION(mat_mult)
 
 				for (k = 1; k < Acols; k++) {
 					if (EXPECTED(acol)) {
-						aval2 = HT_NEXT_BUCKET_VAL_IND(Z_ARRVAL_P(aval), acol);
+						aval2 = HT_NEXT_ELEMENT_VAL_IND(Z_ARRVAL_P(aval), acol);
 					}
 
 					if (EXPECTED(acol)) {
@@ -1674,11 +1984,15 @@ PHP_FUNCTION(mat_mult)
 				zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &tmprow);
 
 				/* Bail out reasonably quickly if the global PHP runtime timeout has been exceeded. */
+#if PHP_MAJOR_VERSION >= 8
+				if (zend_atomic_bool_load_ex(&EG(timed_out))) {
+#else
 				if (EG(timed_out)) {
+#endif
 					arow = NULL;
 				}
 
-				if (arow)  aval = HT_NEXT_BUCKET_VAL_IND(a, arow);
+				if (arow)  aval = HT_NEXT_ELEMENT_VAL_IND(a, arow);
 			}
 
 			efree(zlB);
@@ -2085,6 +2399,9 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_hash_substr, 0, 0, 2)
 	ZEND_ARG_INFO(0, algo)
 	ZEND_ARG_INFO(0, data)
 	ZEND_ARG_INFO(0, raw_output)
+#if PHP_MAJOR_VERSION >= 8
+	ZEND_ARG_INFO(0, options)
+#endif
 	ZEND_ARG_INFO(0, data_offset)
 	ZEND_ARG_TYPE_INFO(0, data_length, IS_LONG, 1)
 ZEND_END_ARG_INFO()
@@ -2094,6 +2411,10 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_hash_hmac_substr, 0, 0, 3)
 	ZEND_ARG_INFO(0, data)
 	ZEND_ARG_INFO(0, key)
 	ZEND_ARG_INFO(0, raw_output)
+#if PHP_MAJOR_VERSION >= 8
+/* Hmm...see notes in hash_hmac_substr().  There seems to be some inconsistency between the definitions of hash() and hash_hmac(). */
+/*	ZEND_ARG_INFO(0, options) */
+#endif
 	ZEND_ARG_INFO(0, data_offset)
 	ZEND_ARG_TYPE_INFO(0, data_length, IS_LONG, 1)
 ZEND_END_ARG_INFO()
