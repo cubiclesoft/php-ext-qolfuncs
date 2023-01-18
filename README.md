@@ -86,7 +86,7 @@ Reallocates the buffer associated with a string and returns the previous size.
 
 Returns:  The previous size of the string.
 
-This function can preallocate a buffer or truncate an existing string.  Inline modifying one byte at a time is approximately 3.8 times faster than appending one byte at a time to the end of a string.
+This function can preallocate a buffer or truncate an existing string.  Inline modifying one byte at a time is approximately 1.7 to 3.8 times faster than appending one byte at a time to the end of a string.
 
 Goes hand-in-hand with str_splice() virtual buffers.  For example, preallocating an estimated 1MB buffer, filling the buffer using str_splice(), and then calling str_realloc() to finalize the string.
 
@@ -137,7 +137,7 @@ This proof-of-concept function is nearly identical to str_split() but adds strin
 
 Target audience:  Users that call `str_split(substr($str))`.
 
-Why it should be added to PHP core:  Saves a call to substr().
+Why it should be added to PHP core:  Saves a call to substr() and keeps the str_split() prototype in line with explode().
 
 How it should be incorporated into PHP core:  Just extend `str_split()` with offset and length parameters.  Don't add a new global function.  `str_split_substr()` exists solely to provide working code.
 
@@ -208,7 +208,7 @@ Data
 4 byte CRC-32
 ```
 
-Target audience:  All users who work with binary data.
+Target audience:  Users who work with binary data containing hashes/CRCs.
 
 Why it should be added to PHP core:  Copying data out of a string just to hash it is fairly expensive when a few minor pointer adjustments have the same effect.
 
@@ -342,7 +342,7 @@ Matrix multiplication of two matrices from linear algebra is a traditionally O(N
 
 Target audience:  Users working with matrices.
 
-Why it should be added to PHP core:  Performant matrix multiplication operations from linear algebra.
+Why it should be added to PHP core:  Performant matrix multiplication operations from linear algebra.  Preliminary testing shows this function to be 46 times faster than the best userland implementation.
 
 How it should be incorporated into PHP core:  As-is into `ext/standard/math.c`.
 
@@ -367,7 +367,7 @@ The `$combinelimit` limits [Zalgo text](https://en.wikipedia.org/wiki/Zalgo_text
 
 Target audience:  All users.
 
-Why it should be added to PHP core:  Validating UTF-8 in userland requires processing one byte at a time, which is slow and better done in PHP core.  `mb_check_encoding($string, "UTF-8")` requires mbstring, which is not compiled in by default and doesn't have options for important protections that PHP should have out of the box.  Recursive regex checking is an even worse option and can crash PCRE.  Unicode is a complex Standard and most people get it wrong.  In addition, passing malformed UTF-8 to databases, processes, or various libraries can trigger security vulnerabilities.  UTF-8 is the most popular character set globally for the web but PHP accepts UTF-8 user input and does not have a built-in UTF-8 validation function.
+Why it should be added to PHP core:  Validating UTF-8 in userland requires processing one byte at a time, which is slow and better done in PHP core.  `mb_check_encoding($string, "UTF-8")` requires mbstring, which is not compiled in by default and doesn't have options for important protections that PHP should have out of the box.  Recursive regex checking is an even worse option and can crash PCRE.  Unicode is a complex Standard and most people get it wrong.  In addition, passing malformed UTF-8 to databases, processes, or various libraries can trigger security vulnerabilities.  UTF-8 is the most popular character set globally for the web.  PHP accepts UTF-8 user input but does not have a built-in UTF-8 validation function.
 
 How it should be incorporated into PHP core:  As a global function, it would perhaps fit into `ext/standard/type.c` or `ext/standard/string.c`?  But maybe it would work equally well as a filter.  Or both?
 
