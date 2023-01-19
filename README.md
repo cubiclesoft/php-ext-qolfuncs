@@ -51,10 +51,10 @@ Removes the string designated by offset and length in the destination and replac
 
 * $dst - A string passed by reference to splice.
 * $dst_offset - The offset into the destination string to start the splice.  Supports negative offsets from the end of the string.
-* $dst_length - The length of the destination string to replace from the offset.  Supports negative lengths and is nullable (Default is null).
+* $dst_length - The length of the destination string to replace from the offset.  Supports negative lengths from the end of the string and is nullable (Default is null).
 * $src - A string to insert starting at $dst_offset (Default is '').
 * $src_offset - The offset into the source string to begin copying.  Supports negative offsets from the end of the string (Default is 0).
-* $src_length - The length of the source string to copy.  Supports negative lengths and is nullable (Default is null).
+* $src_length - The length of the source string to copy.  Supports negative lengths from the end of the string and is nullable (Default is null).
 * $src_repeat - The number of times to repeat the source string (Default is 1).
 * $shrink - Whether or not to shrink the destination string (Default is true).  When false and the destination is smaller than the input buffer, then this affects the return value.
 * $dst_lastsize - The last size returned from str_splice().  Nullable (Default is null).
@@ -107,7 +107,7 @@ Splits a string on string separator and return array of components.  If limit is
 * $str - The string to split.
 * $limit - The number of components to return.
 * $str_offset - The offset into the string to begin splitting.  Supports negative offsets from the end of the string (Default is 0).
-* $str_length - The length of the string being split.  Supports negative lengths and is nullable (Default is null).
+* $str_length - The length of the string being split.  Supports negative lengths from the end of the string and is nullable (Default is null).
 
 Returns:  An array containing the split string components.
 
@@ -129,7 +129,7 @@ Convert a string to an array.  If split_length is specified, break the string do
 * $str - A string to split.
 * $split_length - The chunk length of each entry in the array (Default is 1).
 * $str_offset - The offset into the string to begin splitting.  Supports negative offsets from the end of the string (Default is 0).
-* $str_length - The length of the string being split.  Supports negative lengths and is nullable (Default is null).
+* $str_length - The length of the string being split.  Supports negative lengths from the end of the string and is nullable (Default is null).
 
 Returns:  An array containing the split string components.
 
@@ -173,7 +173,7 @@ Binary-safe file write.
 * $fp - A resource to an open file.
 * $str - A string to store the read data in.
 * $str_offset - The offset into the string to begin writing from.  Supports negative offsets from the end of the string (Default is 0).
-* $str_length - The length of the string being written.  Supports negative lengths and is nullable (Default is null).
+* $str_length - The length of the string being written.  Supports negative lengths from the end of the string and is nullable (Default is null).
 
 Returns:  An integer containing the number of bytes read on success, false otherwise.
 
@@ -196,7 +196,7 @@ Generate a hash of a given input string.  Returns lowercase hexits by default.
 * $data - The data to hash.
 * $raw_output - Output raw data when true, lowercase hexits when false (Default is false).
 * $data_offset - The offset into the string to begin hashing from.  Supports negative offsets from the end of the string (Default is 0).
-* $data_length - The length of the string to hash.  Supports negative lengths and is nullable (Default is null).
+* $data_length - The length of the string to hash.  Supports negative lengths from the end of the string and is nullable (Default is null).
 
 Returns:  A string containing the result of the hash.
 
@@ -226,7 +226,7 @@ Generate a hash of a given input string with a key using HMAC.  Returns lowercas
 * $key - A string containing the HMAC key.
 * $raw_output - Output raw data when true, lowercase hexits when false (Default is false).
 * $data_offset - The offset into the string to begin hashing from.  Supports negative offsets from the end of the string (Default is 0).
-* $data_length - The length of the string to hash.  Supports negative lengths and is nullable (Default is null).
+* $data_length - The length of the string to hash.  Supports negative lengths from the end of the string and is nullable (Default is null).
 
 Returns:  A string containing the result of the hash.
 
