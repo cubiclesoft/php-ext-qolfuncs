@@ -253,11 +253,11 @@ Export the colors/color indexes of a range of pixels as an array.
 
 Returns:  A 2D array containing the exported pixel colors on success, emits a notice and returns a boolean of false on error.
 
-This long-overdue function massively improves performance when working with gd images at the pixel level.  Calling `imagecolorat()` in a loop is painfully slow.  For example, when processing a 3000x5000 pixel image, that's 15 million function calls to `imagecolorat()` to access every pixel of the image.  This function can rapidly export any portion of the image as a userland 2D array of integers.  Instead of 15 million PHP function calls, even one call per row would be a mere 5,000 function calls.
+This function improves performance when working with gd images at the pixel level.  Calling `imagecolorat()` in a loop is slow.  For example, when processing a 3000x5000 pixel image, that's 15 million function calls to `imagecolorat()` to access every pixel of the image.  This function can rapidly export any portion of the image as a userland 2D array of integers.  Instead of 15 million PHP function calls, even one call per row would be a mere 5,000 function calls.
 
 Target audience:  All users who use gd to do image processing.
 
-Why it should be added to PHP core:  Notably improved performance.  Also, PECL ImageMagick has a similar but more advanced function.
+Why it should be added to PHP core:  Improved performance.  Also, PECL ImageMagick has a similar but more advanced function.
 
 How it should be incorporated into PHP core:  As-is into `ext/gd/gc.c`.  Although PHP 8.x changed things up for gd, so it will need some minor code cleanup.
 
@@ -275,11 +275,11 @@ Sets pixels to the specified colors in the 2D array.
 
 Returns:  A boolean indicating whether or not the operation was successful.
 
-This long-overdue function massively improves performance when working with gd images at the pixel level.  Calling `imagesetpixel()` in a loop is painfully slow.  For example, when processing a 3000x5000 pixel image, that's 15 million function calls to `imagesetpixel()` to modify every pixel of the image.  This function can rapidly import any portion of the image from a userland 2D array of integers.  Instead of 15 million PHP function calls, even one call per row would be a mere 5,000 function calls.
+This function improves performance when working with gd images at the pixel level.  Calling `imagesetpixel()` in a loop is slow.  For example, when processing a 3000x5000 pixel image, that's 15 million function calls to `imagesetpixel()` to modify every pixel of the image.  This function can rapidly import any portion of the image from a userland 2D array of integers.  Instead of 15 million PHP function calls, even one call per row would be a mere 5,000 function calls.
 
 Target audience:  All users who use gd to do image manipulation.
 
-Why it should be added to PHP core:  Notably improved performance.  Also, PECL ImageMagick has a similar but more advanced function.
+Why it should be added to PHP core:  Improved performance.  Also, PECL ImageMagick has a similar but more advanced function.
 
 How it should be incorporated into PHP core:  As-is into `ext/gd/gc.c`.  Although PHP 8.x changed things up for gd, so it will need some minor code cleanup.
 

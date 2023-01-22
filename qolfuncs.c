@@ -1279,6 +1279,20 @@ PHP_FUNCTION(hash_hmac_substr)
 # include <gd_errors.h>
 #endif
 
+/*
+// If you want to test the gd functions, modify gd.c:
+
+zend_class_entry *phpi_gd_get_gd_image_ce(void)
+{
+	return gd_image_ce;
+}
+
+
+// And add to php_gd.h:
+
+PHP_GD_API zend_class_entry *phpi_gd_get_gd_image_ce(void);
+*/
+
 /* {{{ proto array imageexportpixels(resource im, int x, int y, int width, int height)
    Export the colors/color indexes of a range of pixels as an array. */
 PHP_FUNCTION(imageexportpixels)
@@ -1289,7 +1303,8 @@ PHP_FUNCTION(imageexportpixels)
 
 	ZEND_PARSE_PARAMETERS_START(5, 5)
 #if PHP_MAJOR_VERSION >= 8
-		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+/*		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce) */
+		Z_PARAM_OBJECT_OF_CLASS(IM, phpi_gd_get_gd_image_ce())
 #else
 		Z_PARAM_RESOURCE(IM)
 #endif
@@ -1379,7 +1394,8 @@ PHP_FUNCTION(imageimportpixels)
 
 	ZEND_PARSE_PARAMETERS_START(4, 4)
 #if PHP_MAJOR_VERSION >= 8
-		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce)
+/*		Z_PARAM_OBJECT_OF_CLASS(IM, gd_image_ce) */
+		Z_PARAM_OBJECT_OF_CLASS(IM, phpi_gd_get_gd_image_ce())
 #else
 		Z_PARAM_RESOURCE(IM)
 #endif
